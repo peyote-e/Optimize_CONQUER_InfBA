@@ -1,5 +1,7 @@
 import json
 import re
+
+import torch
 from spacy.lang.en import English
 from neo4jDatabaseConnection import KGENVIRONMENT
 import numpy as np
@@ -9,6 +11,7 @@ sys.path.append("../utils")
 import utils as ut
 sys.path.append("../BLINK/")
 import elq.main_dense as main_dense
+from sentence_transformers import SentenceTransformer, util
 
 """Get context entities per question along KG paths starting from there;
 Candidate entities are scored by four different scores (lexical match, neighbor overlap, ned score, kg prior);
@@ -17,6 +20,7 @@ ELQ is used as NED tool"""
 ENTITY_PATTERN = re.compile('Q[0-9]+')
 nlp = English()
 nlp.add_pipe(nlp.create_pipe('sentencizer'))
+similarity_model = model = SentenceTransformer('sentence-transformers/allenai-specter')
 
 #datastructures to store retrieved context entities and its KG paths
 startPoints = dict()
@@ -98,23 +102,17 @@ class ContextNode:
         return "turn: " + str(self.turn) + ", neighbors: " + str(self.neighbors) + ", oneHopPaths: " + str(self.oneHopPaths) 
 
 
-#calculate Jaccard overlap for node label and question
-def getStringSimQuestionNode(node, question):
+#calculate Bert similarity for node label and question
+def getStringSimQuestionNode(nodeLabel, question):
     sent = nlp(question)
-    tokens = [token.text.lower() for token in sent if  not token.is_stop ]
-    nodeLabel = ut.getLabel(node)
+    question_token = [token.text.lower() for token in sent if not token.is_stop]
+
     nodeSent = nlp(nodeLabel)
-    nodeTokens = [token.text.lower() for token in nodeSent if  not token.is_stop ]
-    match_count = 0
-    for token in tokens:
-        if token in nodeTokens:
-            match_count += 1 
-    
-    total_match = 0.0
-    union = len(tokens) + len(nodeTokens)- match_count
-    if union > 0:
-        total_match = match_count/union
-    return total_match
+    node_tokens = [token.text.lower() for token in nodeSent if not token.is_stop]
+    sentence_embeddings = similarity_model.encode([' '.join(question_token), ' '.join(node_tokens)])
+
+    cosine_scores = util.cos_sim(sentence_embeddings[0], sentence_embeddings[1])
+    return torch.IntTensor.item(cosine_scores)
 
 
 #find further context entities for given question in one hop neighborhood
