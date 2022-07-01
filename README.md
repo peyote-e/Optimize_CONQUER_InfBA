@@ -10,15 +10,23 @@ The goal is to optimise the starting points.
 
 ## Models (to be continued )
 
+###Models Transformer 
+- multi-qa-distilbert-cos-v1 
+https://huggingface.co/sentence-transformers/multi-qa-distilbert-cos-v1 \
+  This model was tuned for semantic search: Given a query/question, if can find relevant passages
+  
+
 - sentence-transformers/bert-base-nli-mean-tokens https://huggingface.co/sentence-transformers/bert-base-nli-mean-tokens \
  ! Model is deprecated ! Currently showing best results
   
 
-- multi-qa-distilbert-cos-v1 
-https://huggingface.co/sentence-transformers/multi-qa-distilbert-cos-v1 \
-  This model was tuned for semantic search: Given a query/question, if can find relevant passages
-
-
 - multi-qa-mpnet-base-dot-v1 https://huggingface.co/sentence-transformers/multi-qa-mpnet-base-dot-v1 \
 This model was tuned for semantic search: Given a query/question if can find relevant passages. It was trained on a large and diverse set of (question, answer) pairs.
+
+- stsb-distilbert-base
+
+- all-MiniLM-L6-v2
+
+
+![alt text](model_performance_diff_correct_false_answers-2.png)
   
