@@ -27,6 +27,12 @@ This model was tuned for semantic search: Given a query/question if can find rel
 
 - all-MiniLM-L6-v2
 
+The Test was conducted only with typical conversational utterance to test how robust the system is compared to more complete reformulations
 
-![alt text](model_performance_diff_correct_false_answers-2.png)
+![alt text](model_performance_diff_correct_false_answers_2.png)
   
+-> Best results:
+1) sentence-transformers/multi-qa-distilbert-cos-v1
+2) all-MiniLM-L6-v2c
+3) multi-qa-mpnet-base-dot-v1
+4) sentence-transformers/paraphrase-multilingual-mpnet-base-v2
