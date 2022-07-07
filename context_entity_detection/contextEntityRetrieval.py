@@ -20,7 +20,7 @@ ELQ is used as NED tool"""
 ENTITY_PATTERN = re.compile('Q[0-9]+')
 nlp = English()
 nlp.add_pipe(nlp.create_pipe('sentencizer'))
-similarity_model = model = SentenceTransformer('sentence-transformers/allenai-specter')
+#similarity_model = model = SentenceTransformer('sentence-transformers/allenai-specter')
 
 #datastructures to store retrieved context entities and its KG paths
 startPoints = dict()
@@ -38,6 +38,12 @@ ned_score = 0.7
 
 #cut off for KG prior
 MAX_PRIOR = 100
+
+#models for semantic simalarity
+model_1 = SentenceTransformer('sentence-transformers/multi-qa-distilbert-cos-v1')
+#model_2 = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+#model_3 = SentenceTransformer('sentence-transformers/multi-qa-distilbert-cos-v1')
+#model_4 = SentenceTransformer('sentence-transformers/paraphrase-multilingual-mpnet-base-v2')
 
 with open("../data/labels_dict.json") as labelFile:
     labels_dict = json.load(labelFile)
@@ -103,7 +109,7 @@ class ContextNode:
 
 
 #calculate Bert similarity for node label and question
-def getStringSimQuestionNode(nodeLabel, question):
+def getStringSimQuestionNode(nodeLabel, question, similarity_model):
     sent = nlp(question)
     question_token = [token.text.lower() for token in sent if not token.is_stop]
 
@@ -145,7 +151,7 @@ def expandStartingPoints(context_nodes, currentid, question, tagged_entities):
                 candidates[neighbor]["prior"] = neighbor_count/MAX_PRIOR
 
             #calculate sim between candidate and question
-            candidates[neighbor]["sim"] = getStringSimQuestionNode(neighbor, question)
+            candidates[neighbor]["sim"] = getStringSimQuestionNode(neighbor, question, model_1)
             #check if candidate was discovered by NED tool
             tagged = False 
             for entry in tagged_entities:
@@ -285,11 +291,11 @@ if __name__ == '__main__':
 
     processData(train_data)       
     #store startpoints per question
-    with open("../data/train_data/startPoints_trainset.json", "w") as start_file:
+    with open("../data/train_data/startPoints_trainset_new.json", "w") as start_file:
         json.dump(startPoints, start_file)
     
     #store paths per startpoint
-    with open("../data/train_data/contextPaths_trainset.json", "w") as path_file:
+    with open("../data/train_data/contextPaths_trainset_new.json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
 
     print("Successfully stored startpoints and KG paths for training data")
@@ -300,11 +306,11 @@ if __name__ == '__main__':
     processData(dev_data)
            
     #store startpoints per question
-    with open("../data/dev_data/startPoints_devset.json", "w") as start_file:
+    with open("../data/dev_data/startPoints_devset_new.json", "w") as start_file:
         json.dump(startPoints, start_file)
     
     #store paths per startpoint
-    with open("../data/dev_data/contextPaths_devset.json", "w") as path_file:
+    with open("../data/dev_data/contextPaths_devset_new.json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
     
     print("Successfully stored startpoints and KG paths for dev data")
@@ -315,11 +321,11 @@ if __name__ == '__main__':
     processData(test_data)
            
     #store startpoints per question
-    with open("../data/test_data/startPoints_testset.json", "w") as start_file:
+    with open("../data/test_data/startPoints_testset_new.json", "w") as start_file:
         json.dump(startPoints, start_file)
     
     #store paths per startpoint
-    with open("../data/test_data/contextPaths_testset.json", "w") as path_file:
+    with open("../data/test_data/contextPaths_testset_new.json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
 
     print("Successfully stored startpoints and KG paths for test data")
