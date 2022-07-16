@@ -7,12 +7,12 @@ from neo4jDatabaseConnection import KGENVIRONMENT
 import numpy as np
 import argparse
 import sys
-sys.path.append("../utils")
+#sys.path.append("../utils")
 import utils as ut
 sys.path.append("../BLINK/")
 import elq.main_dense as main_dense
 from sentence_transformers import SentenceTransformer, util
-
+from questionTypeMatcher import QuestionTypeMatcher
 """Get context entities per question along KG paths starting from there;
 Candidate entities are scored by four different scores (lexical match, neighbor overlap, ned score, kg prior);
 ELQ is used as NED tool"""
@@ -20,7 +20,7 @@ ELQ is used as NED tool"""
 ENTITY_PATTERN = re.compile('Q[0-9]+')
 nlp = English()
 nlp.add_pipe(nlp.create_pipe('sentencizer'))
-#similarity_model = model = SentenceTransformer('sentence-transformers/allenai-specter')
+
 
 #datastructures to store retrieved context entities and its KG paths
 startPoints = dict()
@@ -34,7 +34,8 @@ start_score = 0.25
 sim_score = 0.1
 overlap_score = 0.1
 prior_score = 0.1
-ned_score = 0.7
+ned_score = 0.5
+bonus_score = 0.2
 
 #cut off for KG prior
 MAX_PRIOR = 100
@@ -45,16 +46,18 @@ model_1 = SentenceTransformer('sentence-transformers/multi-qa-distilbert-cos-v1'
 #model_3 = SentenceTransformer('sentence-transformers/multi-qa-distilbert-cos-v1')
 #model_4 = SentenceTransformer('sentence-transformers/paraphrase-multilingual-mpnet-base-v2')
 
-with open("../data/labels_dict.json") as labelFile:
+
+
+with open("../../data/labels_dict.json") as labelFile:
     labels_dict = json.load(labelFile)
 
-with open("../data/ConvRef/ConvRef_trainset.json") as json_file:
+with open("../../data/ConvRef/ConvRef_trainset.json") as json_file:
     train_data = json.load(json_file)
 
-with open("../data/ConvRef/ConvRef_devset.json") as json_file:
+with open("../../data/ConvRef/ConvRef_devset.json") as json_file:
     dev_data = json.load(json_file)
 
-with open("../data/ConvRef/ConvRef_testset.json") as json_file:
+with open("../../data/ConvRef/ConvRef_testset.json") as json_file:
     test_data = json.load(json_file)
 
 #data+config relevant for ELQ NED
@@ -123,10 +126,13 @@ def getStringSimQuestionNode(nodeLabel, question, similarity_model):
 
 #find further context entities for given question in one hop neighborhood
 def expandStartingPoints(context_nodes, currentid, question, tagged_entities):
-    candidates = dict()  
+    candidates = dict()
+    matched, question_type = QuestionTypeMatcher(question)
     #go over existing context entity for this conversation so far: 
     for node in context_nodes.keys():
         neighbors = context_nodes[node].getNeighbors()
+
+
         #go over 1 hop neighbors 
         for neighbor in neighbors:
             if len(neighbor) < 2:
@@ -141,6 +147,12 @@ def expandStartingPoints(context_nodes, currentid, question, tagged_entities):
                 continue
             candidates[neighbor] = dict()
             candidates[neighbor]["count"] = 1.0
+
+            #add QuestionType bonus
+            if nlp(neighbor).ents[0].label_ == question_type:
+                candidates[neighbor]["bonus"] = 1.0
+            else:
+                candidates[neighbor]["bonus"]= 0
 
             #use number of triples where neighbor appears as subject (= number of outgoing paths) from KG (neo4j database) as KG prior
             neighbor_count = env.get_number_of_neighbors(neighbor)
@@ -167,7 +179,7 @@ def expandStartingPoints(context_nodes, currentid, question, tagged_entities):
         #normalize count by number of total context nodes we have
         candidates[candidate]["count"] /= len(context_nodes)
         #calculate score consisting of four different scores (similarity, neighborhood overlap, KG prior and NED score)
-        score = sim_score * candidates[candidate]["sim"] + overlap_score * candidates[candidate]["count"] + prior_score * candidates[candidate]["prior"] + ned_score * candidates[candidate]["nerd"]
+        score = sim_score * candidates[candidate]["sim"] + overlap_score * candidates[candidate]["count"] + prior_score * candidates[candidate]["prior"] + ned_score * candidates[candidate]["nerd"] + bonus_score * candidates[candidate]["bonus"]
         #only take candidates above the threshold
         if score >= start_score:
             new_starts.append(candidate)
@@ -291,11 +303,11 @@ if __name__ == '__main__':
 
     processData(train_data)       
     #store startpoints per question
-    with open("../data/train_data/startPoints_trainset_new.json", "w") as start_file:
+    with open("../../data/train_data/startPoints_trainset_new.json", "w") as start_file:
         json.dump(startPoints, start_file)
     
     #store paths per startpoint
-    with open("../data/train_data/contextPaths_trainset_new.json", "w") as path_file:
+    with open("../../data/train_data/contextPaths_trainset_new.json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
 
     print("Successfully stored startpoints and KG paths for training data")
@@ -306,11 +318,11 @@ if __name__ == '__main__':
     processData(dev_data)
            
     #store startpoints per question
-    with open("../data/dev_data/startPoints_devset_new.json", "w") as start_file:
+    with open("../../data/dev_data/startPoints_devset_new.json", "w") as start_file:
         json.dump(startPoints, start_file)
     
     #store paths per startpoint
-    with open("../data/dev_data/contextPaths_devset_new.json", "w") as path_file:
+    with open("../../data/dev_data/contextPaths_devset_new.json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
     
     print("Successfully stored startpoints and KG paths for dev data")
@@ -321,11 +333,11 @@ if __name__ == '__main__':
     processData(test_data)
            
     #store startpoints per question
-    with open("../data/test_data/startPoints_testset_new.json", "w") as start_file:
+    with open("../../data/test_data/startPoints_testset_new.json", "w") as start_file:
         json.dump(startPoints, start_file)
     
     #store paths per startpoint
-    with open("../data/test_data/contextPaths_testset_new.json", "w") as path_file:
+    with open("../../data/test_data/contextPaths_testset_new.json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
 
     print("Successfully stored startpoints and KG paths for test data")
