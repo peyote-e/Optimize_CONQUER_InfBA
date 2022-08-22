@@ -1,5 +1,6 @@
 import json
 import re
+import time
 
 import torch
 import spacy
@@ -7,13 +8,20 @@ from neo4jDatabaseConnection import KGENVIRONMENT
 import numpy as np
 import argparse
 import sys
-# sys.path.append("../utils")
+sys.path.append("Optimize_CONQUER_InfBA/")
+sys.path.append("/export/home/8steinbi/Bachelor/Optimize_CONQUER_InfBA/BLINK/")
+sys.path.append("/export/home/8steinbi/Bachelor/Optimize_CONQUER_InfBA/BLINK/elq")
+sys.path.append("Optimize_CONQUER_InfBA/context_entity_detection")
+sys.path.append("../utils")
+
+start_time = time.time()
 import utils as ut
 
 sys.path.append("../BLINK/")
-import elq.main_dense as main_dense
+
+import BLINK.elq.main_dense as main_dense
 from sentence_transformers import SentenceTransformer, util
-from questionTypeMatcher import QuestionTypeMatcher
+
 
 """Get context entities per question along KG paths starting from there;
 Candidate entities are scored by four different scores (lexical match, neighbor overlap, ned score, kg prior);
@@ -26,49 +34,56 @@ nlp = spacy.load("en_core_web_md")
 startPoints = dict()
 globalSeenContextNodes = dict()
 
+
+
 # neo4j database access
 env = KGENVIRONMENT()
 
 # best hyperparameters found:
-start_score = 0.25
-sim_score = 0.1
+start_score = 0.47
+sim_score = 0.4
 overlap_score = 0.1
-prior_score = 0.1
-ned_score = 0.5
-bonus_score = 0.2
+prior_score = 0.15
+ned_score = 0.35
+bonus_score = 0.0
 
+value_list = []
 # cut off for KG prior
 MAX_PRIOR = 100
 
 # models for semantic simalarity
-model_1 = SentenceTransformer('sentence-transformers/multi-qa-distilbert-cos-v1')
-# model_2 = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+#model_1 = SentenceTransformer('sentence-transformers/multi-qa-distilbert-cos-v1')
+model_name = 'model_2'
+model_2 = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 # model_3 = SentenceTransformer('sentence-transformers/multi-qa-distilbert-cos-v1')
 # model_4 = SentenceTransformer('sentence-transformers/paraphrase-multilingual-mpnet-base-v2')
 
 
-with open("../../data/labels_dict.json") as labelFile:
+with open("../data/labels_dict.json") as labelFile:
     labels_dict = json.load(labelFile)
 
-with open("../../data/ConvRef/ConvRef_trainset.json") as json_file:
+print("labels_dict.json  loaded")
+
+with open("../data/ConvRef/ConvRef_trainset.json") as json_file:
     train_data = json.load(json_file)
-
-with open("../../data/ConvRef/ConvRef_devset.json") as json_file:
+print("ConvRef_trainset.json  loaded")
+with open("../data/ConvRef/ConvRef_devset.json") as json_file:
     dev_data = json.load(json_file)
-
-with open("../../data/ConvRef/ConvRef_testset.json") as json_file:
+print("/ConvRef_devset.jso  loaded")
+with open("../data/ConvRef/ConvRef_testset.json") as json_file:
     test_data = json.load(json_file)
+print(" ConvRef_testset.json  loaded")
 
-#data+config relevant for ELQ NED
-models_path = "../BLINK/models/" # the path where you stored the ELQ models
+# data+config relevant for ELQ NED
+models_path = "../BLINK/models/"  # the path where you stored the ELQ models
 config = {
     "interactive": False,
-    "biencoder_model": models_path+"elq_wiki_large.bin",
-    "biencoder_config": models_path+"elq_large_params.txt",
-    "cand_token_ids_path": models_path+"entity_token_ids_128.t7",
-    "entity_catalogue": models_path+"entity.jsonl",
-    "entity_encoding": models_path+"all_entities_large.t7",
-    "output_path": "logs/", # logging directory
+    "biencoder_model": models_path + "elq_wiki_large.bin",
+    "biencoder_config": models_path + "elq_large_params.txt",
+    "cand_token_ids_path": models_path + "entity_token_ids_128.t7",
+    "entity_catalogue": models_path + "entity.jsonl",
+    "entity_encoding": models_path + "all_entities_large.t7",
+    "output_path": "logs/",  # logging directory
     "faiss_index": "hnsw",
     "index_path": models_path + "faiss_hnsw_index.pkl",
     "num_cand_mentions": 10,
@@ -100,36 +115,64 @@ class ContextNode:
         self.neighbors = neighbors
 
     def getOneHopPaths(self):
-        return self.oneHopPaths 
+        return self.oneHopPaths
 
     def setOneHopPaths(self, paths):
         self.oneHopPaths = paths
 
     def __str__(self):
-        return "turn: " + str(self.turn) + ", neighbors: " + str(self.neighbors) + ", oneHopPaths: " + str(self.oneHopPaths) 
+        return "turn: " + str(self.turn) + ", neighbors: " + str(self.neighbors) + ", oneHopPaths: " + str(
+            self.oneHopPaths)
+
+    # calculate Bert similarity for node label and question
 
 
-#calculate Bert similarity for node label and question
-def getStringSimQuestionNode(nodeLabel, question, similarity_model):
+def getStringSimQuestionNode(nodeLabelList, question, similarity_model):
+    start_time =time.time()
     sent = nlp(question)
     question_token = [token.text.lower() for token in sent if not token.is_stop]
+    nodes = []
+    for neighbour in nodeLabelList:
+        node = ut.getLabel(neighbour)
+        nodeSent = nlp(node)
+        node_tokens = [token.text.lower() for token in nodeSent if not token.is_stop]
+        nodes.append(' '.join(node_tokens))
+    node_embeddings = similarity_model.encode(nodes)
+    sentence_embeddings = similarity_model.encode([' '.join(question_token)])
+    cosine_scores = util.cos_sim(sentence_embeddings[0], node_embeddings)[0].cpu().tolist()
+    stop_time = time.time()
+    #print('Bert Sim Measurement for '+ str(len(nodeLabelList)) + ' neigbours took ', stop_time-start_time)
+    return dict(zip(nodeLabelList,cosine_scores))
 
-    nodeSent = nlp(nodeLabel)
-    node_tokens = [token.text.lower() for token in nodeSent if not token.is_stop]
-    sentence_embeddings = similarity_model.encode([' '.join(question_token), ' '.join(node_tokens)])
 
-    cosine_scores = util.cos_sim(sentence_embeddings[0], sentence_embeddings[1])
-    return torch.IntTensor.item(cosine_scores)
+def get_question_type(question):
 
+    date_type_question_beginnings = ['in what year', 'in which year', 'when was the', 'what year was', 'what year did','on what date']
+
+    gpe_type_question_beginnings = ['in which country', 'where is the', 'where was the', 'where is the', 'what country is', 'what city was', 'in which city']
+
+    if ' '.join(question.split()[:3]) in date_type_question_beginnings:
+        return ['DATE', 'TIME']
+    if ' '.join(question.split()[:3]) in gpe_type_question_beginnings:
+        return ['GPE','Location']
+
+    else:
+        return ['NO_TYPE']
 
 # find further context entities for given question in one hop neighborhood
 def expandStartingPoints(context_nodes, currentid, question, tagged_entities):
     candidates = dict()
-    matched, question_type = QuestionTypeMatcher(question.lower())
+    #question_type = get_question_type(question.lower())
     # go over existing context entity for this conversation so far:
     for node in context_nodes.keys():
-        neighbors = context_nodes[node].getNeighbors()
 
+        neighbors = context_nodes[node].getNeighbors()
+        bert_cosine_results = getStringSimQuestionNode(neighbors, question, model_2)
+        time_count=0
+        time_nerd = 0
+        time_overlap=0
+        #make out of tagged_entities a dic so ned score can be faster returned
+        ned_score_dic = {entity[0]:entity[1] for entity in tagged_entities}
         # go over 1 hop neighbors
         for neighbor in neighbors:
             if len(neighbor) < 2:
@@ -139,50 +182,66 @@ def expandStartingPoints(context_nodes, currentid, question, tagged_entities):
             if neighbor in context_nodes.keys():
                 continue
             # check if candidate is in neighborhood of several context entities
+            start_time_overlap = time.time()
             if neighbor in candidates.keys():
                 candidates[neighbor]["count"] += 1
                 continue
             candidates[neighbor] = dict()
             candidates[neighbor]["count"] = 1.0
 
+            #print('OVERLAP SCORE: ',candidates[neighbor]["count"])
+            stop_time_overlap=time.time()
+            time_overlap += stop_time_overlap-start_time_overlap
+
             # add QuestionType bonus
-            if len(nlp(neighbor).ents) > 0 and nlp(neighbor).ents[0].label_ == question_type:
-                candidates[neighbor]["bonus"] = 1.0
-            else:
-                candidates[neighbor]["bonus"] = 0
+            #if len(nlp(neighbor).ents) > 0 and nlp(neighbor).ents[0].label_ in question_type:
+            #    candidates[neighbor]["bonus"] = 1.0
+            #else:
+            #    candidates[neighbor]["bonus"] = 0
 
             # use number of triples where neighbor appears as subject (= number of outgoing paths) from KG (neo4j database) as KG prior
+            start_time_count = time.time()
             neighbor_count = env.get_number_of_neighbors(neighbor)
+
             # this is cut off and normalized by MAX_PRIOR
             if neighbor_count > MAX_PRIOR:
                 candidates[neighbor]["prior"] = 1.0
             else:
                 candidates[neighbor]["prior"] = neighbor_count / MAX_PRIOR
-
+            stop_time_count = time.time()
+            time_count += stop_time_count-start_time_count
+            #print('NEIGHOURHOOD COUNT: ', candidates[neighbor]["prior"])
             # calculate sim between candidate and question
-            candidates[neighbor]["sim"] = getStringSimQuestionNode(neighbor, question, model_1)
+
+            candidates[neighbor]["sim"]= bert_cosine_results.get(neighbor)
             # check if candidate was discovered by NED tool
+            start_time_nerd = time.time()
             tagged = False
-            for entry in tagged_entities:
-                if entry[0] == neighbor:
-                    tagged = True
-                    candidates[neighbor]["nerd"] = entry[1]
-                    break
+            if neighbor in ned_score_dic:
+                tagged = True
+                candidates[neighbor]["nerd"] = ned_score_dic.get(neighbor)
+                break
             if not tagged:
                 candidates[neighbor]["nerd"] = 0.0
+            #print('NERD SCORE: ', candidates[neighbor]["nerd"])
+            stop_time_nerd = time.time()
+            time_nerd += stop_time_nerd-start_time_nerd
 
     new_starts = []
     for candidate in candidates.keys():
         # normalize count by number of total context nodes we have
         candidates[candidate]["count"] /= len(context_nodes)
         # calculate score consisting of four different scores (similarity, neighborhood overlap, KG prior and NED score)
-        score = sim_score * candidates[candidate]["sim"] + overlap_score * candidates[candidate][
-            "count"] + prior_score * candidates[candidate]["prior"] + ned_score * candidates[candidate][
-                    "nerd"] + bonus_score * candidates[candidate]["bonus"]
+        score = sim_score * candidates[candidate]["sim"] + overlap_score * candidates[candidate]["count"] + prior_score * candidates[candidate]["prior"] + ned_score * candidates[candidate]["nerd"]
+        value_list.append({'candidate': candidate, 'question': question, 'sim':candidates[candidate]["sim"] , 'count': candidates[candidate]["count"], 'prior': candidates[candidate]["prior"], 'ned': candidates[candidate]["nerd"]})
         # only take candidates above the threshold
         if score >= start_score:
             new_starts.append(candidate)
+            print('new starts added :' + str(candidate))
 
+    #print('Overlap calc took avrg. ', time_overlap/len(neighbors))
+    #print('Time for neighbour prior took ', time_count/len(neighbors))
+    #print('Time to calc avrg nerd: ', time_nerd/len(neighbors))
     return new_starts
 
 
@@ -201,6 +260,7 @@ def retrieveContextEntities(question, currentid, turn, context_nodes, elq_predic
     new_starts = expandStartingPoints(context_nodes, currentid, question, elq_predictions)
     for newId in new_starts:
         updateContext(context_nodes, newId, turn)
+
         if not newId in startPoints[currentid]:
             startPoints[currentid].append(newId)
 
@@ -268,12 +328,15 @@ def getElqPredictions(question_id, convquestion):
 
 def processData(data):
     # go over each question/reformulation in ConvRef to retrieve the context entities
+    timer= 0
     counter = 0
     for conv in data:
         context_nodes = dict()
         convquestion = ""
         # go over each question
+        start_time_questionset = time.time()
         for question_info in conv['questions']:
+
             elq_predictions = dict()
             question_id = question_info['question_id']
             turn = int(question_id.split("-")[1])
@@ -281,6 +344,7 @@ def processData(data):
             convquestion += question_info["question"] + " "
             # get predictions from NED tool as one scoring factor, include conv. history for better results
             elq_predictions = getElqPredictions(question_id, convquestion)
+            print('The elq pred. : ', elq_predictions )
             retrieveContextEntities(question, question_id, turn, context_nodes, elq_predictions)
 
             # go over each available reformulation
@@ -292,21 +356,35 @@ def processData(data):
                 retrieveContextEntities(reformulation, ref_id, turn, context_nodes, elq_predictions)
 
         counter += 1
-        if counter == 100:
+        stop_time_questionset=time.time()
+        time_it_took= stop_time_questionset-start_time_questionset
+        timer+= time_it_took
+        print('Questionset took : ', time_it_took/60, ' min')
+        print(counter)
+        if counter == 50:
+            print('Avrg. Time Questionset took: ', timer/50)
+            timer = 0
             counter = 0
             print("question id: ", question_id, ", question: ", question)
+            print(question_id ," of ", len(data) )
+            with open(f"/export/home/8steinbi/data/train_data/entity_values_{question_id}.json", "w") as check_file:
+                json.dump(startPoints, check_file)
             sys.stdout.flush()
     return
 
 
 if __name__ == '__main__':
     processData(train_data)
+    #store entity values
+
+    with open(f"/export/home/8steinbi/data/train_data/entity_values_{model_name}.json", "w") as value_file:
+        json.dump(value_list,value_file)
     # store startpoints per question
-    with open("../../data/train_data/startPoints_trainset_new.json", "w") as start_file:
+    with open(f"/export/home/8steinbi/data/train_data/startPoints_trainset_{model_name}.json", "w") as start_file:
         json.dump(startPoints, start_file)
 
     # store paths per startpoint
-    with open("../../data/train_data/contextPaths_trainset_new.json", "w") as path_file:
+    with open(f"/export/home/8steinbi/data/train_data/contextPaths_trainset._{model_name}json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
 
     print("Successfully stored startpoints and KG paths for training data")
@@ -317,11 +395,11 @@ if __name__ == '__main__':
     processData(dev_data)
 
     # store startpoints per question
-    with open("../../data/dev_data/startPoints_devset_new.json", "w") as start_file:
+    with open(f"/export/home/8steinbi/data/dev_data/startPoints_devset_{model_name}.json", "w") as start_file:
         json.dump(startPoints, start_file)
 
     # store paths per startpoint
-    with open("../../data/dev_data/contextPaths_devset_new.json", "w") as path_file:
+    with open(f"/export/home/8steinbi/data/dev_data/contextPaths_devset_{model_name}.json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
 
     print("Successfully stored startpoints and KG paths for dev data")
@@ -332,11 +410,14 @@ if __name__ == '__main__':
     processData(test_data)
 
     # store startpoints per question
-    with open("../../data/test_data/startPoints_testset_new.json", "w") as start_file:
+    with open(f"/export/home/8steinbi/data/test_data/startPoints_testset_{model_name}.json", "w") as start_file:
         json.dump(startPoints, start_file)
 
     # store paths per startpoint
-    with open("../../data/test_data/contextPaths_testset_new.json", "w") as path_file:
+    with open(f"/export/home/8steinbi/data/test_data/contextPaths_testset_{model_name}.json", "w") as path_file:
         json.dump(globalSeenContextNodes, path_file)
 
     print("Successfully stored startpoints and KG paths for test data")
+
+    end_time= time.time()
+    print('Run time was'+ str(end_time-start_time) +' sec')
