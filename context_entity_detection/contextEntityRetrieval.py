@@ -129,20 +129,24 @@ class ContextNode:
 
 def getStringSimQuestionNode(nodeLabelList, question, similarity_model):
     start_time =time.time()
-    sent = nlp(question)
-    question_token = [token.text.lower() for token in sent if not token.is_stop]
-    nodes = []
-    for neighbour in nodeLabelList:
-        node = ut.getLabel(neighbour)
-        nodeSent = nlp(node)
-        node_tokens = [token.text.lower() for token in nodeSent if not token.is_stop]
-        nodes.append(' '.join(node_tokens))
-    node_embeddings = similarity_model.encode(nodes)
-    sentence_embeddings = similarity_model.encode([' '.join(question_token)])
-    cosine_scores = util.cos_sim(sentence_embeddings[0], node_embeddings)[0].cpu().tolist()
-    stop_time = time.time()
-    #print('Bert Sim Measurement for '+ str(len(nodeLabelList)) + ' neigbours took ', stop_time-start_time)
-    return dict(zip(nodeLabelList,cosine_scores))
+    try:
+        sent = nlp(question)
+        question_token = [token.text.lower() for token in sent if not token.is_stop]
+        nodes = []
+        for neighbour in nodeLabelList:
+            node = ut.getLabel(neighbour)
+            nodeSent = nlp(node)
+            node_tokens = [token.text.lower() for token in nodeSent if not token.is_stop]
+            nodes.append(' '.join(node_tokens))
+        node_embeddings = similarity_model.encode(nodes)
+        sentence_embeddings = similarity_model.encode([' '.join(question_token)])
+        cosine_scores = util.cos_sim(sentence_embeddings[0], node_embeddings)[0].cpu().tolist()
+        stop_time = time.time()
+        #print('Bert Sim Measurement for '+ str(len(nodeLabelList)) + ' neigbours took ', stop_time-start_time)
+        return dict(zip(nodeLabelList,cosine_scores))
+    except:
+        zero_list = [0]*len(nodeLabelList)
+        return dict(zip(nodeLabelList,zero_list))
 
 
 def get_question_type(question):
