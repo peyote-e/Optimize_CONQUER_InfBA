@@ -2,33 +2,42 @@ import sys
 import json
 import pickle
 import tensorflow as tf 
-from transformers import BertTokenizer, TFBertModel
-sys.path.append("../utils")
-import utils as ut
 
+import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
+sys.path.append("../utils")
+
+print(tf.config.list_physical_devices())
+print("# GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
+
+
+from transformers import BertTokenizer, TFBertModel
+import utils as ut
 """Encode questions and actions with pre-trained BERT model"""
 
 #load all questions (this needs to be done for dev and test data accordingly)
-with open("../data/train_data/all_questions_trainset.json", "r") as questionFile:
+with open("//data1/8steinbi/train_data/all_questions_trainset.json", "r") as questionFile:
     train_questions = json.load(questionFile)
 
 #load all paths for each startpoint per question
-with open("../data/train_data/contextPaths_trainset.json", "r") as afile:
+with open("//data1/8steinbi/train_data/contextPaths_trainset_model2.json", "r") as afile:
     train_paths = json.load(afile)
 
-with open("../data/dev_data/all_questions_devset.json", "r") as questionFile:
-    dev_questions = json.load(questionFile)
+
+#with open("../data/dev_data/all_questions_devset.json", "r") as questionFile:
+ #   dev_questions = json.load(questionFile)
 
 #load all paths for each startpoint per question
-with open("../data/dev_data/contextPaths_devset.json", "r") as afile:
-    dev_paths = json.load(afile)
+#with open("../data/dev_data/contextPaths_devset.json", "r") as afile:
+ #   dev_paths = json.load(afile)
 
-with open("../data/test_data/all_questions_testset.json", "r") as questionFile:
-    test_questions = json.load(questionFile)
+#with open("../data/test_data/all_questions_testset.json", "r") as questionFile:
+ #   test_questions = json.load(questionFile)
 
 #load all paths for each startpoint per question
-with open("../data/test_data/contextPaths_testset.json", "r") as afile:
-    test_paths = json.load(afile)
+#with open("../data/test_data/contextPaths_testset.json", "r") as afile:
+ #   test_paths = json.load(afile)
 
 
 bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -130,65 +139,66 @@ def getActionEncodings(action_labels):
 
 #encode questions
 encoded_train_questions = dict()
-encoded_dev_questions = dict()
-encoded_test_questions = dict()
+#encoded_dev_questions = dict()
+#encoded_test_questions = dict()
 
 for qId in train_questions.keys():
     encoded_train_questions[qId] = encodeQuestion(train_questions[qId])
-
+'''
 for qId in dev_questions.keys():
     encoded_dev_questions[qId] = encodeQuestion(dev_questions[qId])
 
 for qId in test_questions.keys():
     encoded_test_questions[qId] = encodeQuestion(test_questions[qId])
-
-with open("../data/train_data/encoded_questions_trainset.pickle", "wb") as q_file:
+'''
+with open("//data1/8steinbi/train_data/encoded_questions_trainset_model2.pickle", "wb") as q_file:
     pickle.dump(encoded_train_questions, q_file)
 
-with open("../data/dev_data/encoded_questions_devset.pickle", "wb") as q_file:
-    pickle.dump(encoded_dev_questions, q_file)
 
-with open("../data/test_data/encoded_questions_testset.pickle", "wb") as q_file:
-    pickle.dump(encoded_test_questions, q_file)
+#with open("../data/dev_data/encoded_questions_devset.pickle", "wb") as q_file:
+ #   pickle.dump(encoded_dev_questions, q_file)
+
+#with open("../data/test_data/encoded_questions_testset.pickle", "wb") as q_file:
+ #   pickle.dump(encoded_test_questions, q_file)
 
 print("question encoding done")
 
 #get action labels (needed for action encoding)
 train_action_labels = getActionLabels(train_paths)
-dev_action_labels = getActionLabels(dev_paths)
-test_action_labels = getActionLabels(test_paths)
+#dev_action_labels = getActionLabels(dev_paths)
+#test_action_labels = getActionLabels(test_paths)
 
-with open("../data/train_data/action_labels_trainset.json", "w") as qfile:
+with open("//data1/8steinbi/train_data/action_labels_trainset_model2.json", "w") as qfile:
    json.dump(train_action_labels, qfile)
 
-with open("../data/dev_data/action_labels_devset.json", "w") as qfile:
-   json.dump(dev_action_labels, qfile)
+#with open("../data/dev_data/action_labels_devset.json", "w") as qfile:
+ #  json.dump(dev_action_labels, qfile)
 
-with open("../data/test_data/action_labels_testset.json", "w") as qfile:
-   json.dump(test_action_labels, qfile)
+#with open("../data/test_data/action_labels_testset.json", "w") as qfile:
+ #  json.dump(test_action_labels, qfile)
 
 #encode actions batchwise
 encoded_train_paths, train_action_nbrs = getActionEncodings(train_action_labels)
-encoded_dev_paths, dev_action_nbrs = getActionEncodings(dev_action_labels) 
-encoded_test_paths, test_action_nbrs = getActionEncodings(test_action_labels)
+#encoded_dev_paths, dev_action_nbrs = getActionEncodings(dev_action_labels)
+#encoded_test_paths, test_action_nbrs = getActionEncodings(test_action_labels)
 
-with open("../data/train_data/encoded_paths_trainset.pickle", "wb") as a_file:
+with open("//data1/8steinbi/train_data/encoded_paths_trainset_model2.pickle", "wb") as a_file:
    pickle.dump(encoded_train_paths, a_file)
 
-with open("../data/train_data/action_numbers_trainset.json", "w") as nbr_file:
+with open("//data1/8steinbi/train_data/action_numbers_trainset_model2.json", "w") as nbr_file:
    json.dump(train_action_nbrs, nbr_file)
 
-with open("../data/dev_data/encoded_paths_devset.pickle", "wb") as a_file:
-   pickle.dump(encoded_dev_paths, a_file)
+#with open("../data/dev_data/encoded_paths_devset.pickle", "wb") as a_file:
+ #  pickle.dump(encoded_dev_paths, a_file)
 
-with open("../data/dev_data/action_numbers_devset.json", "w") as nbr_file:
-   json.dump(dev_action_nbrs, nbr_file)
+#with open("../data/dev_data/action_numbers_devset.json", "w") as nbr_file:
+ #  json.dump(dev_action_nbrs, nbr_file)
 
-with open("../data/test_data/encoded_paths_testset.pickle", "wb") as a_file:
-   pickle.dump(encoded_test_paths, a_file)
+#with open("../data/test_data/encoded_paths_testset.pickle", "wb") as a_file:
+ #  pickle.dump(encoded_test_paths, a_file)
 
-with open("../data/test_data/action_numbers_testset.json", "w") as nbr_file:
-   json.dump(test_action_nbrs, nbr_file)
+#with open("../data/test_data/action_numbers_testset.json", "w") as nbr_file:
+  # json.dump(test_action_nbrs, nbr_file)
 
 print("action encoding done")
 

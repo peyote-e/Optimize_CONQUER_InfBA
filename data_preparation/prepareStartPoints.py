@@ -99,18 +99,18 @@ def createQuestionStartpointList(starts):
 
 propagateStartpoints()
 
-with open("../data/train_data/startpoints_propagated_trainset.json", "w") as s_file:
+with open("../data/train_data/startpoints_propagated_trainset_model2.json", "w") as s_file:
     json.dump(startPoints, s_file)
 
 
 reachable_start_points = getReachableStartpoints()
 
-with open("../data/train_data/reachable_startpoints_propagated_trainset.json", "w") as stp_file:
+with open("../data/train_data/reachable_startpoints_propagated_trainset_model2.json", "w") as stp_file:
     json.dump(reachable_start_points, stp_file)
 
 
 q_start_indices = createQuestionStartpointList(reachable_start_points)
 
-with open("../data/train_data/question_start_indices_trainset.json", "w") as qfile:
+with open("../data/train_data/question_start_indices_trainset_model2.json", "w") as qfile:
    json.dump(q_start_indices, qfile)
   
