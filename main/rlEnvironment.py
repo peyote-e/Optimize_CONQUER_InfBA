@@ -8,10 +8,12 @@ import tensorflow as tf  # pylint: disable=g-explicit-tensorflow-version-import
 import re
 from tf_agents.environments import py_environment
 from tf_agents.trajectories import time_step as ts
+import torch
 
 sys.path.append("../utils")
 import utils as ut
 
+action_id =0
 
 
 """CONQUER environment"""
@@ -73,13 +75,15 @@ class RLEnvironment(py_environment.PyEnvironment):
         self.alt_reward = alt_reward
   
         super(RLEnvironment, self).__init__()
-     
+
+
 
     def observation_spec(self):
         return self._observation_spec
 
     def action_spec(self):
         return self._action_spec
+
 
     @property
     def batched(self):
@@ -109,21 +113,29 @@ class RLEnvironment(py_environment.PyEnvironment):
         #get next training ids for question and startpoints
         q_counter, start_counter = self.q_start_indices[self.question_counter] 
         self.qId = self.questionIds[q_counter]
-     
+
         self.start_id = self.starts_per_question[self.qId][start_counter]
         self.question_counter+= 1
-
+        global action_id
+        action_id = self.start_id
+        #print(action_id)
         #get pre-computed bert embeddings for the question
         encoded_question = self.all_questions[self.qId]
 
         #optional: get history embeddings
         if self.all_history:
+
             encoded_history = self.all_history[self.qId]
      
         #get action embeddings
         encoded_actions = self.all_actions[self.start_id]
+
         action_nbr = self.number_of_actions[self.start_id]
-       
+
+
+
+
+
         mask = tf.ones(action_nbr)
         if self.all_history:
             zeros = tf.zeros((1002-action_nbr))
@@ -132,17 +144,21 @@ class RLEnvironment(py_environment.PyEnvironment):
         mask = tf.keras.layers.concatenate([mask, zeros], axis=0)
         mask = tf.expand_dims(mask, 0)
         mask = tf.expand_dims(mask, -1)#[1,1001,1] or [1,1002,1]
+
+
      
         #put them together as next observation for the policy network
         if self.all_history:
             observation = tf.keras.layers.concatenate([encoded_history, encoded_question, encoded_actions],axis=0) #[1002, 768]
+
         else:
             observation = tf.keras.layers.concatenate([encoded_question, encoded_actions],axis=0) #[1001, 768]
        
         observation = tf.expand_dims(observation, 0) #[1, 1001, 768] (or [1, 1002, 768])
         observation =  tf.keras.layers.concatenate([observation, mask], axis=2) #[1,1001,769] (or [1, 1002, 769])
         tf.dtypes.cast(observation, tf.float32)
- 
+        #print(observation)
+
         return observation
 
        
