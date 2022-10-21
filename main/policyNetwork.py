@@ -13,13 +13,16 @@ import sys
 
 sys.path.append("../main")
 import rlEnvironment
+
 action_id = 0
 """CONQUER policy network"""
 
+
 def get_curret_id(ids):
-    #print(ids)
+    # print(ids)
     global action_id
     action_id = ids
+
 
 class KGActionDistNet(network.DistributionNetwork):
 
@@ -47,7 +50,7 @@ class KGActionDistNet(network.DistributionNetwork):
         self.dense1 = tf.keras.layers.Dense(768, activation=tf.nn.relu, name="dense1", kernel_initializer=initializer1)
         self.dense2 = tf.keras.layers.Dense(768, name="dense2", kernel_initializer=initializer2)
 
-        self.linear1 = tfl.layers.Linear(num_input_dims=2, use_bias=False )
+        self.linear1 = tfl.layers.Linear(num_input_dims=2, use_bias=False)
 
         self.dist = 0
         self.logits = 0
@@ -61,9 +64,10 @@ class KGActionDistNet(network.DistributionNetwork):
 
     def get_logits(self):
         return self.logits
+
     def load_graph_Embeddings(self, action_id):
         with open("//data1/8steinbi/train_data/embedded_sim_score_vector_model3.pickle", "rb") as emb_file:
-           embedded_actions_file = pickle.load(emb_file)
+            embedded_actions_file = pickle.load(emb_file)
         graph_embedding_list = []
 
         for startingpoint in action_id:
@@ -100,14 +104,11 @@ class KGActionDistNet(network.DistributionNetwork):
         this is called for collecting experience to get the distribution the agent can sample from
         and called once again to get the distribution for a given time step when calculating the loss"""
 
-
-
         is_empty = tf.equal(tf.size(observations), 0)
         if is_empty:
             return 0, network_state
 
-        action_id = [rlEnvironment.action_id]
-
+        #action_id = [rlEnvironment.action_id]
 
         # outer rank will be 0 for one observation, if we have several for calculating the loss it is greater than 1
         outer_rank = nest_utils.get_outer_rank(observations, self.input_tensor_spec)
@@ -117,52 +118,45 @@ class KGActionDistNet(network.DistributionNetwork):
         # get individual parts of observation: action mask, optional history embeddings, question and actions
         # print(observations.shape)
         observations, mask = tf.split(observations, [768, 1], 2)
+        #print('Observation prev: ', observations)
 
         if observations.shape[1] == 2001:
             with_history = False
             observations, actions_and_embedding = tf.split(observations, [1, 2000], 1)  # 2x[batchsize,1,768], 1x[batchsize,1000,768]
         elif observations.shape[1] == 2002:
             with_history = True
-            history, question, actions_and_embedding = tf.split(observations, [1, 1, 2000],1)  # 3x[batchsize,1,768], 1x[batchsize,1000,768]
+            history, question, actions_and_embedding = tf.split(observations, [1, 1, 2000],
+                                                                1)  # 3x[batchsize,1,768], 1x[batchsize,1000,768]
 
         if with_history:
             observations = tf.keras.layers.concatenate([history, question], axis=2)  # [batchsize, 1536]
 
-        print(observations)
 
-        print(actions_and_embedding)
         observations = tf.squeeze(observations, axis=1)
-        actions = tf.slice(actions_and_embedding, [0,0,0], [1,1000,768])
+        actions = tf.slice(actions_and_embedding, [0, 0, 0], [1, 1000, 768])
         graph_embeddings = tf.slice(actions_and_embedding, [0, 1000, 0], [1, 1000, 1])
         graph_embeddings = tf.squeeze(graph_embeddings, axis=2)
-        #print('Graph Embedding: ', graph_embeddings)
+
         availableActions = tf.transpose(actions, perm=[0, 2, 1])  # [batchsize,768, 1000]
-        #availableEmbeddings = tf.transpose(graph_embeddings, perm=[0, 2, 1])  # [batchsize,768, 1000]
-
-
-        #load the graph embeddings
-
-
-
-        #print('Bert Encoding: ', availableActions)
-        print('Graph Embedding: ', graph_embeddings)
 
 
         x = self.dense1(observations)
         out = self.dense2(x)  # [1,768]
-
         out = tf.expand_dims(out, -1)
+        #print('Shape Action: ', availableActions.shape, ' Shape out: ', out.shape)
         # we multiply actions and output of network and get a matrix where each column is vector for one action, we sum over each column to get score for each action
         scores = tf.reduce_sum(tf.multiply(availableActions, out), 1)  # [batchsize,1000,1]
-
-        scores_2 = tf.multiply(scores, graph_embeddings)
-        print(scores_2)
+        #print('First score: ', scores.shape)
+        scores_2 = tf.concat([scores, graph_embeddings], 0)
+        # print(scores_2)
+        scores_2 = tf.transpose(scores_2)
+        #print('Seco score: ', scores_2)
 
         score_linear_layer = self.linear1(scores_2)
-        print(score_linear_layer)
-        #print('Parameter 1: ', self.parameter1)
-        #print('Scores after scalar : ', scores)
-        self.logits = scores
+        # print('linear: ',score_linear_layer)
+        # print('Parameter 1: ', self.parameter1)
+        # print('Scores after scalar : ', scores)
+        self.logits = score_linear_layer
         # prepare the mask
         mask = tf.squeeze(mask)
         mask_zero = tf.zeros_like(mask)  # (scores>0 and scores<0)
@@ -173,10 +167,9 @@ class KGActionDistNet(network.DistributionNetwork):
         else:
             mask = mask[:-1]
         mask = tf.transpose(mask)
-        print(mask.shape)
-        mask = tf.slice(mask,begin=[0],size=[1000])
-        print(mask.shape)
+        mask_2 = tf.slice(mask, begin=[0], size=[1000])
+
         # we convert it to categorical distribution, an action will be sampled from it
         # we use a masking distribution here because we can have less than 1000 valid actions, invalid ones are masked out
-        self.dist = masked.MaskedCategorical(logits=scores, mask=mask)
+        self.dist = masked.MaskedCategorical(logits=scores, mask=mask_2)
         return self.dist, network_state
