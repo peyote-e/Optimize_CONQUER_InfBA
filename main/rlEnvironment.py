@@ -22,7 +22,7 @@ class RLEnvironment(py_environment.PyEnvironment):
   
     def __init__(self, observation_spec, action_spec, all_history, all_questions, questionIds,  starts_per_question, q_start_indices,
      all_actions, action_nbrs, all_answers,  paths, ref_prediction, real_user, fractional_reward, next_info_predictions, ref_predictions,
-      next_info_fraction, ref_fraction, next_questions, next_reformulations, alt_reward):
+      next_info_fraction, ref_fraction, next_questions, next_reformulations, alt_reward, graph_embeddings):
         """observation_spec: observation specification
             action spec: action specification
             all_history: history encodings
@@ -54,6 +54,7 @@ class RLEnvironment(py_environment.PyEnvironment):
         self.all_history = all_history
         self.all_actions = all_actions
         self.number_of_actions = action_nbrs
+        self.graph_embeddings = graph_embeddings
 
         self.starts_per_question = starts_per_question
         self.question_counter = 0
@@ -113,11 +114,10 @@ class RLEnvironment(py_environment.PyEnvironment):
         #get next training ids for question and startpoints
         q_counter, start_counter = self.q_start_indices[self.question_counter] 
         self.qId = self.questionIds[q_counter]
-
         self.start_id = self.starts_per_question[self.qId][start_counter]
         self.question_counter+= 1
-        global action_id
-        action_id = self.start_id
+        #global action_id
+        #action_id = self.start_id
         #print(action_id)
         #get pre-computed bert embeddings for the question
         encoded_question = self.all_questions[self.qId]
@@ -129,35 +129,48 @@ class RLEnvironment(py_environment.PyEnvironment):
      
         #get action embeddings
         encoded_actions = self.all_actions[self.start_id]
-
+        #print('Encoded Shape ', encoded_actions.shape)
         action_nbr = self.number_of_actions[self.start_id]
+        #print('ID :', self.start_id)
+        #print(self.graph_embeddings.get(self.start_id))
 
+        embedding_list = self.graph_embeddings.get(self.start_id)
+        all_item_tensor =[]
+        for item in embedding_list:
+            single_tensor = tf.convert_to_tensor([item])
+            #print('Single Tensor: ', single_tensor)
+            zeros_767 = tf.zeros(767)
+            single_tensor = tf.keras.layers.concatenate([single_tensor,zeros_767], axis=0)
+            #print('Single Tensor: ', single_tensor)
+            all_item_tensor.append(single_tensor)
+        graph_embedding = tf.convert_to_tensor(all_item_tensor)
 
+        zeros = tf.zeros((1000-action_nbr, 768))
+        embedded_actions = tf.keras.layers.concatenate([graph_embedding, zeros],axis=0)
 
-
+        #embedded_actions= tf.reshape(embedded_actions, [1,1000, 768])
 
         mask = tf.ones(action_nbr)
         if self.all_history:
-            zeros = tf.zeros((1002-action_nbr))
+            zeros = tf.zeros((2002-action_nbr))
         else:
-            zeros = tf.zeros((1001-action_nbr))
+            zeros = tf.zeros((2001-action_nbr))
         mask = tf.keras.layers.concatenate([mask, zeros], axis=0)
         mask = tf.expand_dims(mask, 0)
         mask = tf.expand_dims(mask, -1)#[1,1001,1] or [1,1002,1]
 
-
      
         #put them together as next observation for the policy network
         if self.all_history:
-            observation = tf.keras.layers.concatenate([encoded_history, encoded_question, encoded_actions],axis=0) #[1002, 768]
+            observation = tf.keras.layers.concatenate([encoded_history, encoded_question, encoded_actions, embedded_actions],axis=0) #[1002, 768]
 
         else:
-            observation = tf.keras.layers.concatenate([encoded_question, encoded_actions],axis=0) #[1001, 768]
+            observation = tf.keras.layers.concatenate([encoded_question, encoded_actions,embedded_actions],axis=0) #[1001, 768]
        
         observation = tf.expand_dims(observation, 0) #[1, 1001, 768] (or [1, 1002, 768])
         observation =  tf.keras.layers.concatenate([observation, mask], axis=2) #[1,1001,769] (or [1, 1002, 769])
         tf.dtypes.cast(observation, tf.float32)
-        #print(observation)
+        #print('Obs in rlEnv: ', observation)
 
         return observation
 
