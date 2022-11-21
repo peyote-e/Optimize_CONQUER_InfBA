@@ -3,36 +3,34 @@ CONQUER: Reinforcement Learning from Reformulations in Conversational QA over KG
 
 Description
 ------------
-## Optimizing Entity Detection
-To optimise the Entity Detection the Lexical Match using Jaccard overlap is replaced by Bert model. Using Cosine similarity the similarity between the set of
-words in the node label of 𝑛 and all words in 𝑞𝑡 (with stopwords excluded) is calculated. \\
-The goal is to optimise the starting points.
+Part of Bachelor thesis in the Semantic Systems Research Group Department of Informatics at the University of Hamburg
 
-## Models (to be continued )
+##
+This code work build up on CONQUER. 
 
-###Models Transformer 
-- multi-qa-distilbert-cos-v1 
-https://huggingface.co/sentence-transformers/multi-qa-distilbert-cos-v1 \
-  This model was tuned for semantic search: Given a query/question, if can find relevant passages
-  
+### Context Entity Retrieval
+The CONQUER model’s error analysis states that 30% of wrong-answered questions result from missing context entities.
+To improve context entity detection, this theis explores the impact of semantic similarity measures to detect context entities. 
+Using pre-trained Bert models to calculate new sets of context entities.
 
-- sentence-transformers/bert-base-nli-mean-tokens https://huggingface.co/sentence-transformers/bert-base-nli-mean-tokens \
- ! Model is deprecated ! Currently showing best results
-  
+Models used:
 
-- multi-qa-mpnet-base-dot-v1 https://huggingface.co/sentence-transformers/multi-qa-mpnet-base-dot-v1 \
-This model was tuned for semantic search: Given a query/question if can find relevant passages. It was trained on a large and diverse set of (question, answer) pairs.
+* all-MiniLM-L6-v2
+* multi-qu-distilbert-cos-v1
 
-- stsb-distilbert-base
+#### Results
+The change had no positive impact on the training results. 
+This could be because als the parameters were changed, giving the similarity measure 
+more impact. When redoing this, it would be better to stick to the original parameters.
+Calculating context entities is time-intensive and takes roughly 8 days for all data.
 
-- all-MiniLM-L6-v2
+### Graph Embeddings
+There are changes in the main training of CONQUER conducted. The model was enriched with
+the similarity score (dot prod.) calculated between the graph embedded actions starting and ending points. 
+This score will be added to the original Bert score. The distribution of the importance of both scores is learned in form of a linear layer. 
 
-The Test was conducted only with typical conversational utterance to test how robust the system is compared to more complete reformulations
+![Alt text](policy_changed-2.png "Title")
 
-![alt text](model_performance_diff_correct_false_answers_2.png)
-  
--> Best results:
-1) sentence-transformers/multi-qa-distilbert-cos-v1
-2) all-MiniLM-L6-v2c
-3) multi-qa-mpnet-base-dot-v1
-4) sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+#### Results 
+There are/were mistakes in the code. The current changes were not able to be tested.
+So further work could be done here. If there are updates this will be changed. There was alo an increase in the run time (an episode takes 6h to train).<
