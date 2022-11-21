@@ -9,23 +9,24 @@
     "real_user": false,
     "fractional_reward": false,
     "negative_reward": true,
-    "observation_spec_shape_x": 1001,
+    "observation_spec_shape_x": 2001,
     "observation_spec_shape_y": 769,
     
-    "checkpoint_path": "../data/checkpoints/main_exp/idealUser-idealRefPred",
+    "checkpoint_path": "//data1/8steinbi/checkpoints/main_exp/idealUser-idealRefPred_model3_TransE2",
 
-    "starts_per_question": "../data/train_data/reachable_startpoints_propagated_trainset.json",
-    "question_list": "../data/train_data/questionId_list_trainset.json",
-    "paths": "../data/train_data/contextPaths_trainset.json",
-    "answers": "../data/train_data/all_answers_trainset.json",
-    "questions": "../data/train_data/all_questions_trainset.json",
-    "action_nbrs": "../data/train_data/action_numbers_trainset.json",
-    "next_questions": "../data/train_data/next_questions_trainset.json",
-    "next_reformulations": "../data/train_data/next_reformulations_ideal_trainset.json",
-    "q_start_indices": "../data/train_data/question_start_indices_trainset.json",
+    "starts_per_question": "/export/home/8steinbi/train_data/reachable_startpoints_propagated_trainset_model3.json",
+    "question_list": "/export/home/8steinbi/train_data/questionId_list_trainset.json",
+    "paths": "/export/home/8steinbi/train_data/contextPaths_trainset_model_3.json",
+    "answers": "/export/home/8steinbi/train_data/all_answers_trainset.json",
+    "questions": "/export/home/8steinbi/train_data/all_questions_trainset.json",
+    "action_nbrs": "/export/home/8steinbi/train_data/action_numbers_trainset_model3.json",
+    "next_questions": "/export/home/8steinbi/train_data/next_questions_trainset.json",
+    "next_reformulations": "/export/home/8steinbi/train_data/next_reformulations_ideal_trainset.json",
+    "q_start_indices": "/export/home/8steinbi/train_data/question_start_indices_trainset_model3.json",
 
-    "encoded_questions": "../data/train_data/encoded_questions_trainset.pickle",
-    "encoded_actions": "../data/train_data/encoded_paths_trainset.pickle"
+    "encoded_questions": "/export/home/8steinbi/train_data/encoded_questions_trainset_model3.pickle",
+    "encoded_actions": "/export/home/8steinbi/train_data/encoded_paths_trainset_model3.pickle",
+    "embedded_actions": "/export/home/8steinbi/train_data/embedded_sim_score_vector_model3.pickle"
     
 }
 
