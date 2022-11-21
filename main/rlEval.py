@@ -22,25 +22,24 @@ np.random.seed(seed_value)# 4. Set `tensorflow` pseudo-random generator at a fix
 import tensorflow as tf
 tf.random.set_seed(seed_value)
 
-
 from tf_agents.specs import array_spec
 from tf_agents.specs import tensor_spec
 from tf_agents.agents import ReinforceAgent
 from tf_agents.trajectories import time_step as ts
-
 
 import pickle
 import operator
 
 
 from policyNetwork import KGActionDistNet
+from policyNetwork import get_curret_id
 sys.path.append("../utils")
 import utils as ut
 
 tf.compat.v1.enable_v2_behavior()
 train_step_counter = tf.compat.v2.Variable(0)
 learning_rate = 1e-3
-
+current_action_id = 0
 
 #load data from config file
 filename = config["filename"]
@@ -82,6 +81,8 @@ if "agg_type" in config.keys():
 else: 
   agg_type = "add"
 
+with open(config["embedded_actions"], "rb") as embedded_file:
+  graph_embeddings = pickle.load(embedded_file)
 
 #number of actions sampled per agent
 nbr_sample_actions = config["nbr_sample_actions"]
@@ -158,7 +159,7 @@ def call_rl(timesteps, start_ids):
     """apply trained policy network to get top answers (performed in parallel for all context entities/agents"""
     answers = dict()
     #perform one step with evaluation policy
-    action_step = eval_policy.action(timesteps) 
+    action_step = eval_policy.action(timesteps)
     all_actions = np.arange(1000)
     all_actions = tf.expand_dims(all_actions, axis=1)
     #get action distribution from policy network
@@ -195,23 +196,34 @@ def create_observation(startId, encoded_history, encoded_question):
     if not startId in bert_actions.keys():
         #print("Warning: No available actions for starting point with id: ", startId)
         return None
-   
+
     encoded_actions = bert_actions[startId]
     action_nbr = action_nbrs[startId]
+    embedding_list = graph_embeddings[startId]
+    all_item_tensor = []
+    for item in embedding_list:
+        single_tensor = tf.convert_to_tensor([item])
+        zeros_767 = tf.zeros(767)  # has to have a shape of [1,768]
+        single_tensor = tf.keras.layers.concatenate([single_tensor, zeros_767], axis=0)
+        all_item_tensor.append(single_tensor)
+    graph_embedding = tf.convert_to_tensor(all_item_tensor)
+
+    zeros = tf.zeros((1000 - action_nbr, 768))
+    embedded_actions = tf.keras.layers.concatenate([graph_embedding, zeros], axis=0)
     
     mask = tf.ones(action_nbr)
     if encoded_history is None:
-        zeros = tf.zeros((1001-action_nbr))
+        zeros = tf.zeros((2001-action_nbr))
     else:
-        zeros = tf.zeros((1002-action_nbr))
+        zeros = tf.zeros((2002-action_nbr))
     mask = tf.keras.layers.concatenate([mask, zeros], axis=0)
     mask = tf.expand_dims(mask, 0)
     mask = tf.expand_dims(mask, -1)#[1,1001,1]
-    
+
     if encoded_history is None:
-        observation = tf.keras.layers.concatenate([encoded_question, encoded_actions],axis=0) #[1001, 768]
+        observation = tf.keras.layers.concatenate([encoded_question, encoded_actions, embedded_actions],axis=0) #[1001, 768]
     else:
-        observation = tf.keras.layers.concatenate([encoded_history, encoded_question, encoded_actions],axis=0) #[1002, 768]
+        observation = tf.keras.layers.concatenate([encoded_history, encoded_question, encoded_actions, embedded_actions],axis=0) #[1002, 768]
         
  
     observation = tf.expand_dims(observation, 0) #[1, 1001, 768]
@@ -228,7 +240,8 @@ def findAnswer(currentid):
 
     if not currentid in startpoints.keys():
         return []
-    currentStarts = startpoints[currentid]  
+    currentStarts = startpoints[currentid]
+
     if len(currentStarts) == 0:
         return []
     turn = int(currentid.split("-")[1])
@@ -249,7 +262,7 @@ def findAnswer(currentid):
         else:
             observations = np.concatenate((observations, observation))
         startIds.append(startNode)
-   
+
     if not observations is None:
         timeSteps = ts.restart(observations, batch_size=observations.shape[0])
   
@@ -365,7 +378,7 @@ if __name__ == '__main__':
    
         header = "CONV_ID,QUESTION,ANSWER,GOLD_ANSWER,PRECISION@1, HITS@5, MRR" + "\n"
         resFile.write(header)
-        with open("../data/ConvRef/ConvRef_testset.json") as json_file:
+        with open("//export/home/8steinbi/ConvRef/ConvRef_testset.json") as json_file:
             data = json.load(json_file)
            
             avg_prec = 0.0
