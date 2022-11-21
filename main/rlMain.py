@@ -28,8 +28,11 @@ from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.trajectories import trajectory
 from tf_agents.specs import array_spec
 from tf_agents.specs import tensor_spec
-from tf_agents.agents import ReinforceAgent
+#from tf_agents.agents import ReinforceAgent
+from tf_agents.agents.reinforce import reinforce_agent
 from tf_agents.trajectories.time_step import StepType
+from tf_agents.distributions import utils as distribution_utils
+from tf_agents.networks import network
 
 import pickle
 
@@ -143,25 +146,29 @@ with open(config["encoded_actions"], "rb") as a_file:
 with open(config["action_nbrs"], "r") as nbr_file:
   action_nbrs = json.load(nbr_file)
 
+with open(config["embedded_actions"], "rb") as embedded_file:
+  graph_embeddings = pickle.load(embedded_file)
 
 #initialize the environment 
 kgEnv = RLEnvironment(observation_spec, action_spec, encoded_history, encoded_questions, question_list,
-starts_per_question, q_start_indices, encoded_actions, action_nbrs,  answers, paths, ref_prediction, real_user, 
-fractional_reward, next_info_predictions, ref_predictions, next_info_fraction, ref_fraction, next_questions, next_reformulations, alt_reward)
+starts_per_question, q_start_indices, encoded_actions, action_nbrs,  answers, paths, ref_prediction, real_user,
+fractional_reward, next_info_predictions, ref_predictions, next_info_fraction, ref_fraction, next_questions, next_reformulations, alt_reward, graph_embeddings)
 
 
 train_env = tf_py_environment.TFPyEnvironment(kgEnv)
+
 optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
 
 #initialize the policy network
-actor_network = KGActionDistNet( 
+actor_network = KGActionDistNet(
   seed_value,
   train_env.observation_spec(), 
   train_env.action_spec())
 
+
 #initialize the agent
-rfAgent = ReinforceAgent(
-     train_env.time_step_spec(), tensor_spec.from_spec(action_spec), actor_network, optimizer, entropy_regularization=entropy_const, train_step_counter=train_step_counter
+rfAgent = reinforce_agent.ReinforceAgent(
+     train_env.time_step_spec(), tensor_spec.from_spec(action_spec), actor_network=actor_network, optimizer=optimizer,entropy_regularization=entropy_const, train_step_counter=train_step_counter
 )
 rfAgent.initialize()
 
@@ -172,7 +179,7 @@ collect_policy = rfAgent.collect_policy
 def collect_episodes_with_rollouts(environment, policy, num_episodes, num_rollouts):
   episode_counter = 0
   episode_return = 0.0
- 
+
   while episode_counter < num_episodes:
 
     environment.set_is_rollout(False)
@@ -238,10 +245,12 @@ for j in range(num_epochs):
     #collect experience with additional rollouts
     average_return = collect_episodes_with_rollouts(kgEnv, collect_policy,num_episodes, num_rollouts)
     experience = replay_buffer.gather_all()
+    #print('Experience: ', experience)
     if i == 0:
       print("weights: ", actor_network.trainable_weights, flush=True)
     #calculate loss
     train_loss = rfAgent.train(experience)
+    print('Train Loss: ', train_loss)
     if i % 100 == 0:
       print("iteration: ", i, flush=True)
       print("loss: ", train_loss.loss, flush=True)
